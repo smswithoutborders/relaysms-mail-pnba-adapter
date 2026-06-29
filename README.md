@@ -1,111 +1,134 @@
-# Platform Adapter Template
+# RelaySMS-Mail Platform Adapter
 
-## Overview
+This adapter provides a pluggable implementation for integrating email as a messaging platform via [SimpleLogin](https://simplelogin.io). It is designed to work with [RelaySMS Publisher](https://github.com/smswithoutborders/RelaySMS-Publisher), enabling users to send and receive emails through automatically provisioned aliases, with OTP-based authentication handled by [Shortmesh Authy](https://github.com/shortmesh/Authy-API).
 
-This template provides a standardized foundation for developing platform-specific adapters.
+## Requirements
 
----
+- **Python**: Version >= [3.10](https://www.python.org/downloads/)
+- **Python Virtual Environments**: [Documentation](https://docs.python.org/3/tutorial/venv.html)
+- **libmagic**: For MIME type detection from attachment bytes
 
-## Directory Structure
+## Dependencies
 
-The template includes the following files:
+### On Ubuntu
 
-| File                     | Description                                                                                                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `adapter.py`             | Core implementation of the platform-specific adapter. Developers subclass a protocol interface and define required methods here.         |
-| `protocol_interfaces.py` | Abstract base classes that define the protocol contracts (e.g., `OAuth2ProtocolInterface`). Adapters must implement these.               |
-| `ipc_service.py`         | Manages IPC between the host program and the adapter. It routes incoming requests to the appropriate adapter method and returns results. |
-| `main.py`                | Adapter entry point. It initializes the adapter and starts the IPC listener.                                                             |
-| `manifest.ini`           | Describes the adapter with metadata such as its name, shortcode, protocol, and service type.                                             |
-| `config.ini`             | Contains adapter configuration, including paths to credential files.                                                                     |
-| `credentials.json`       | Stores authentication credentials (e.g., client ID/secret for OAuth2), referenced by `config.ini`.                                       |
-| `requirements.txt`       | Lists Python dependencies required to run the adapter.                                                                                   |
-
----
-
-## Quick Start
-
-### Step 1: Implement the Adapter
-
-> [!WARNING]
->
-> Avoid modifying `protocol_interfaces.py` or `ipc_service.py` unless necessary. Changes may cause incompatibilities with the host system.
-
-1. Open `adapter.py`.
-2. Identify and subclass the correct protocol interface from `protocol_interfaces.py`.
-   Example: For OAuth2-based platforms, use `OAuth2ProtocolInterface`.
-3. Implement all required abstract methods. Common methods for OAuth2 include:
-
-```python
-class GmailOAuth2Adapter(OAuth2ProtocolInterface):
-    def get_authorization_url(self, **kwargs) -> Dict[str, Any]:
-        # Return a URL for user authorization.
-
-    def get_access_token(self, code: str, **kwargs) -> Dict[str, Any]:
-        # Exchange auth code for access token.
-
-    def get_user_info(self, **kwargs) -> Dict[str, Any]:
-        # Return user profile or account metadata.
-
-    def revoke_token(self, **kwargs) -> bool:
-        # Invalidate the access token.
-
-    def send_message(self, message: str, **kwargs) -> bool:
-        # Send a message using the platform's API.
+```bash
+sudo apt install build-essential python3-dev libmagic1
 ```
 
-### Step 2: Configure Adapter Metadata
+## Installation
 
-Edit the following configuration files:
+1. **Create a virtual environment:**
 
-#### `manifest.ini`
+   ```bash
+   python3 -m venv venv
+   ```
 
-Defines core metadata about the adapter.
+2. **Activate the virtual environment:**
 
-```ini
-[platform]
-name = gmail
-shortcode = g
-protocol = oauth2
-service_type = email
-icon_svg = https://raw.githubusercontent.com/smswithoutborders/gmail-oauth2-adapter/main/icons/gmail.svg
-icon_png = https://raw.githubusercontent.com/smswithoutborders/gmail-oauth2-adapter/main/icons/gmail.png
-support_url_scheme = false
-```
+   ```bash
+   . venv/bin/activate
+   ```
 
-#### `config.ini`
+3. **Install the required Python packages:**
 
-Points to authentication credentials and defines asset directories.
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+## Configuration
+
+Set the `credentials.json` path in `manifest.ini`:
 
 ```ini
 [credentials]
 path = ./credentials.json
 ```
 
-> [!NOTE]
->
-> - Ensure `credentials.json` exists and contains valid keys, secrets, or tokens per your platform’s requirements.
+**Sample `credentials.json`**
 
----
-
-## Running & Testing the Adapter
-
-You can test the adapter using standard IPC messages sent through stdin:
-
-```bash
-echo '{"method": "get_authorization_url", "params": {"autogenerate_code_verifier": true}}' | python3 main.py
+```json
+{
+  "SL_PRIMARY_EMAIL": "you@example.com",
+  "SL_PRIMARY_DOMAIN": "example.com",
+  "SL_API_KEY": "your-simplelogin-api-key",
+  "SMTP_HOST": "smtp.example.com",
+  "SMTP_PORT": 465,
+  "SMTP_USERNAME": "you@example.com",
+  "SMTP_PASSWORD": "your-smtp-password",
+  "SMTP_USE_TLS": true,
+  "ALIAS_PREFIX": "",
+  "ALIAS_SUFFIX": "",
+  "SL_BASE_URL": "https://app.simplelogin.io/api",
+  "AUTHY_BASE_URL": "https://authy.shortmesh.com",
+  "AUTHY_TOKEN": "mt_xxxxx",
+  "AUTHY_SENDER": "+237123456789"
+}
 ```
 
-> [!NOTE]
->
-> Replace `get_authorization_url` with other supported methods (`get_access_token`, `send_message`, etc.), and update `params` accordingly.
+**Field reference**
 
----
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `SL_PRIMARY_EMAIL` | Yes | - | Mailbox email address in SimpleLogin |
+| `SL_PRIMARY_DOMAIN` | Yes | - | Domain used for alias generation |
+| `SL_API_KEY` | Yes | - | SimpleLogin API key |
+| `SMTP_HOST` | Yes | - | SMTP server hostname |
+| `SMTP_PORT` | Yes | - | `465` for TLS, `587` for STARTTLS |
+| `SMTP_USERNAME` | Yes | - | SMTP login username |
+| `SMTP_PASSWORD` | Yes | - | SMTP login password |
+| `SMTP_USE_TLS` | No | `true` | Use implicit TLS (port 465) |
+| `ALIAS_PREFIX` | No | `""` | Prefix prepended to generated aliases |
+| `ALIAS_SUFFIX` | No | `""` | Suffix appended to generated aliases |
+| `SL_BASE_URL` | No | `https://app.simplelogin.io/api` | SimpleLogin API base URL |
+| `AUTHY_BASE_URL` | No | `https://authy.shortmesh.com` | Shortmesh Authy API base URL |
+| `AUTHY_TOKEN` | No | - | Matrix Bearer token for Authy authentication |
+| `AUTHY_SENDER` | No | - | Device number to send OTPs from |
 
-## Keeping Interfaces Up to Date
+## Testing
 
-If you suspect that `protocol_interfaces.py` is outdated or inconsistent with the host platform, sync it using:
+Install dev dependencies:
 
 ```bash
-curl -o protocol_interfaces.py https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/feat/plugable-platforms/platforms/protocol_interfaces.py
+pip install -r requirements.txt
+```
+
+Run the test client:
+
+```bash
+python -m tests.client
+```
+
+### Available Commands
+
+| Command | Arguments | Description |
+|---|---|---|
+| `send_code` | `<phone_number> <channel>` | Send an OTP to a phone number via the specified platform |
+| `verify` | `<phone_number> <code> <channel>` | Verify an OTP and provision an alias |
+| `send_message` | `<phone_number> <recipient> <subject> <message>` | Send an email via the provisioned alias |
+| `invalidate` | `<phone_number>` | Delete the alias for a phone number |
+| `help` | `[command]` | Show available commands or detail for a specific one |
+| `quit` | - | Exit the client |
+
+### Example Session
+
+```
+mail> send_code +237123456780 wa
+{}
+
+mail> verify +237123456780 123456 wa
+{
+  "userinfo": {
+    "account_identifier": "+237123456780",
+    "name": "237123456780@example.com"
+  }
+}
+
+mail> send_message +237123456780 recipient@example.com "Hello from RelaySMS" "This is a test email."
+Sent: True
+
+mail> invalidate +237123456780
+Invalidated: True
+
+mail> quit
 ```

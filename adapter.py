@@ -1,47 +1,157 @@
-"""
-This program is free software: you can redistribute it under the terms
-of the GNU General Public License, v. 3.0. If a copy of the GNU General
-Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
-"""
+# SPDX-License-Identifier: GPL-3.0-only
 
-from protocol_interfaces import OAuth2ProtocolInterface
+import base64
+import re
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
+from authy import AuthyClient
+from config import Credentials, load_credentials
 from logutils import get_logger
+from protocol_interfaces import PNBAProtocolInterface
+from simplelogin import AliasResponse, Attachment, SimpleLoginClient, SMTPConfig
 
 logger = get_logger(__name__)
 
-"""
-Developer Guide - Protocol Adapter Template
 
-Purpose:
----------
-This file serves as a template for creating platform-specific protocol adapters 
-that implement a defined communication protocol, such as OAuth2.
+class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
+    """Adapter integrating RelaySMS-Mail with the PNBA protocol."""
 
-Usage:
-------
-To implement a new protocol adapter:
-1. Choose the appropriate protocol interface (e.g., OAuth2ProtocolInterface).
-2. Create a new class following the naming convention: <PlatformName><Protocol>Adapter.
-   Example: GmailOAuth2Adapter
-3. Subclass the selected protocol interface.
-4. Implement all abstract methods defined in the interface.
-5. Add any necessary platform-specific logic or configuration handling.
+    def __init__(self):
+        self.credentials: Credentials = load_credentials(self.config)
+        self.client: SimpleLoginClient = SimpleLoginClient(
+            api_key=self.credentials.SL_API_KEY,
+            smtp=SMTPConfig(
+                host=self.credentials.SMTP_HOST,
+                port=self.credentials.SMTP_PORT,
+                username=self.credentials.SMTP_USERNAME,
+                password=self.credentials.SMTP_PASSWORD,
+                use_tls=self.credentials.SMTP_USE_TLS,
+            ),
+            base_url=self.credentials.SL_BASE_URL,
+        )
+        self.authy: AuthyClient = AuthyClient(
+            base_url=self.credentials.AUTHY_BASE_URL,
+            token=self.credentials.AUTHY_TOKEN,
+        )
 
-Notes:
-------
-- The protocol interface provides `.manifest` and `.config` attributes for accessing 
-    adapter metadata and settings.
+    def _normalize_phone(self, phone_number: str) -> str:
+        return re.sub(r"\D", "", phone_number)
 
-Example:
---------
-See the sample `GmailOAuth2Adapter` class below.
-"""
+    def _build_alias(self, phone_number: str) -> str:
+        digits = self._normalize_phone(phone_number)
+        return (
+            f"{self.credentials.ALIAS_PREFIX}"
+            f"{digits}"
+            f"{self.credentials.ALIAS_SUFFIX}"
+            f"@{self.credentials.SL_PRIMARY_DOMAIN}"
+        )
 
+    def _build_alias_prefix(self, phone_number: str) -> str:
+        digits = self._normalize_phone(phone_number)
+        return f"{self.credentials.ALIAS_PREFIX}{digits}{self.credentials.ALIAS_SUFFIX}"
 
-class GmailOAuth2Adapter(OAuth2ProtocolInterface):
-    """
-    Sample implementation of a Gmail adapter using the OAuth2 protocol.
-    Use this class as a reference for building custom platform adapters.
-    """
+    def _get_alias(self, phone_number: str) -> Optional[AliasResponse]:
+        alias = self._build_alias(phone_number)
+        aliases = self.client.fetch_aliases(
+            query=alias,
+            mailbox_email=self.credentials.SL_PRIMARY_EMAIL,
+        )
+        if not aliases:
+            logger.debug("Alias '%s' not found.", alias)
+            return None
+        return aliases[0]
 
-    # TODO: Implement required methods defined in OAuth2ProtocolInterface
+    def _get_mailbox_id(self) -> int:
+        mailbox = self.client.fetch_mailbox_by_email(self.credentials.SL_PRIMARY_EMAIL)
+        if not mailbox:
+            raise RuntimeError(
+                f"Mailbox for '{self.credentials.SL_PRIMARY_EMAIL}' not found."
+            )
+        return mailbox["id"]
+
+    def _create_alias(self, phone_number: str) -> AliasResponse:
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S (%Z)")
+        return self.client.create_alias(
+            alias_prefix=self._build_alias_prefix(phone_number),
+            mailbox_id=self._get_mailbox_id(),
+            hostname=self.credentials.SL_PRIMARY_DOMAIN,
+            alias_name=f"{self._normalize_phone(phone_number)} Via RelaySMS",
+            note=f"Created by RelaySMS-Mail at {timestamp}.",
+        )
+
+    def send_authorization_code(self, phone_number: str, **kwargs) -> Dict[str, Any]:
+        channel = kwargs.get("channel")
+        if not channel:
+            raise ValueError("Missing required 'channel' parameter.")
+
+        self.authy.generate_otp(
+            phone_number=phone_number,
+            platform=channel,
+            sender=self.credentials.AUTHY_SENDER,
+        )
+
+        return {"success": True, "message": "Authorization code sent."}
+
+    def validate_code_and_fetch_user_info(
+        self, phone_number: str, code: str, **kwargs
+    ) -> Dict[str, Any]:
+        channel = kwargs.get("channel")
+        if not channel:
+            raise ValueError("Missing required 'channel' parameter.")
+
+        self.authy.verify_otp(phone_number=phone_number, platform=channel, code=code)
+
+        alias = self._get_alias(phone_number) or self._create_alias(phone_number)
+
+        return {
+            "userinfo": {"account_identifier": phone_number, "name": alias["email"]},
+        }
+
+    def validate_password_and_fetch_user_info(
+        self, phone_number: str, password: str, **kwargs
+    ) -> Dict[str, Any]:
+        return {}
+
+    def invalidate_session(self, phone_number: str, **_) -> bool:
+        alias = self._get_alias(phone_number)
+        if not alias:
+            return True
+        self.client.delete_alias(alias["id"])
+        logger.debug("Alias deleted for %s.", phone_number)
+        return True
+
+    def send_message(
+        self, phone_number: str, recipient: str, message: str, **kwargs
+    ) -> bool:
+        subject = kwargs.get("subject")
+        if not subject:
+            raise ValueError("Missing required 'subject' parameter.")
+
+        processed_attachments = []
+        for idx, att_dict in enumerate(kwargs.get("attachments") or []):
+            filename = att_dict.get("filename", f"attachment_{idx}")
+            try:
+                processed_attachments.append(
+                    Attachment(
+                        data=base64.b64decode(att_dict.get("data", "")),
+                        filename=filename,
+                        mimetype=att_dict.get("mimetype"),
+                    )
+                )
+            except Exception as exc:
+                raise ValueError(f"Invalid attachment data in '{filename}'.") from exc
+
+        alias = self._get_alias(phone_number)
+        if not alias:
+            raise RuntimeError(f"Alias for '{phone_number}' not found.")
+
+        self.client.send_email(
+            alias_id=alias["id"],
+            from_email=self.credentials.SL_PRIMARY_EMAIL,
+            to_email=recipient,
+            subject=subject,
+            body=message,
+            attachments=processed_attachments,
+        )
+        return True
