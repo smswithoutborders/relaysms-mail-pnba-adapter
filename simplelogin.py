@@ -33,6 +33,7 @@ class MailboxResponse(TypedDict):
 class AliasResponse(TypedDict):
     id: int
     email: str
+    enabled: bool
     mailboxes: list[MailboxResponse]
 
 
@@ -132,9 +133,7 @@ class SimpleLoginClient:
     ) -> list[AliasResponse]:
         payload: dict[str, Any] = {"query": query} if query else {}
         try:
-            data: AliasListResponse = self._http.post(
-                "/v2/aliases?enabled&page_id=0", payload
-            )
+            data: AliasListResponse = self._http.post("/v2/aliases?page_id=0", payload)
         except HTTPError as e:
             raise SimpleLoginError(str(e)) from e
 
@@ -151,6 +150,15 @@ class SimpleLoginClient:
                 mb.get("email") == mailbox_email for mb in alias.get("mailboxes", [])
             )
         ]
+
+    def toggle_alias(self, alias_id: int) -> bool:
+        """Toggle an alias on/off. Returns the new enabled state."""
+        try:
+            data = self._http.post(f"/aliases/{alias_id}/toggle", {})
+        except HTTPError as e:
+            raise SimpleLoginError(str(e)) from e
+        logger.debug("Alias ID %s toggled, enabled=%s.", alias_id, data["enabled"])
+        return data["enabled"]
 
     def create_alias(
         self,

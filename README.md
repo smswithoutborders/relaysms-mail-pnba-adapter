@@ -70,30 +70,24 @@ path = ./credentials.json
 
 | Field | Required | Default | Description |
 |---|---|---|---|
-| `SL_PRIMARY_EMAIL` | Yes | - | Mailbox email address in SimpleLogin |
-| `SL_PRIMARY_DOMAIN` | Yes | - | Domain used for alias generation |
-| `SL_API_KEY` | Yes | - | SimpleLogin API key |
-| `SMTP_HOST` | Yes | - | SMTP server hostname |
-| `SMTP_PORT` | Yes | - | `465` for TLS, `587` for STARTTLS |
-| `SMTP_USERNAME` | Yes | - | SMTP login username |
-| `SMTP_PASSWORD` | Yes | - | SMTP login password |
-| `SMTP_USE_TLS` | No | `true` | Use implicit TLS (port 465) |
-| `ALIAS_PREFIX` | No | `""` | Prefix prepended to generated aliases |
-| `ALIAS_SUFFIX` | No | `""` | Suffix appended to generated aliases |
-| `SL_BASE_URL` | No | `https://app.simplelogin.io/api` | SimpleLogin API base URL |
-| `AUTHY_BASE_URL` | No | `https://authy.shortmesh.com` | Shortmesh Authy API base URL |
-| `AUTHY_TOKEN` | No | - | Matrix Bearer token for Authy authentication |
-| `AUTHY_SENDER` | No | - | Device number to send OTPs from |
+| `SL_PRIMARY_EMAIL` | Yes | - | Your SimpleLogin account email or the mailbox email you want aliases forwarded to. See [SimpleLogin mailboxes](https://app.simplelogin.io/dashboard/mailbox). |
+| `SL_PRIMARY_DOMAIN` | Yes | - | The custom domain used for alias generation. Must be verified in SimpleLogin. See [custom domains](https://app.simplelogin.io/dashboard/custom_domain). |
+| `SL_API_KEY` | Yes | - | Your SimpleLogin API key. Generate one at [SimpleLogin API Keys](https://app.simplelogin.io/dashboard/api_key). |
+| `SMTP_HOST` | Yes | - | SMTP server hostname. Provided by your email provider (e.g. `smtp.gmail.com`, `smtp.protonmail.ch`). |
+| `SMTP_PORT` | Yes | - | `465` for implicit TLS, `587` for STARTTLS. |
+| `SMTP_USERNAME` | Yes | - | SMTP login username, usually your email address. |
+| `SMTP_PASSWORD` | Yes | - | SMTP login password or app password. See your provider's SMTP docs (e.g. [Gmail](https://support.google.com/mail/answer/185833), [Proton](https://proton.me/support/smtp-submission)). |
+| `SMTP_USE_TLS` | No | `true` | `true` for port 465 (SMTP_SSL), `false` for port 587 (STARTTLS). |
+| `ALIAS_PREFIX` | No | `""` | Static prefix prepended to all generated aliases. |
+| `ALIAS_SUFFIX` | No | `""` | Static suffix appended to all generated aliases. |
+| `SL_BASE_URL` | No | `https://app.simplelogin.io/api` | SimpleLogin API base URL. Override for self-hosted instances. |
+| `AUTHY_BASE_URL` | No | `https://authy.shortmesh.com` | Shortmesh Authy API base URL. Override for self-hosted instances. |
+| `AUTHY_TOKEN` | No | - | Matrix Bearer token for authenticating with Authy. See [Shortmesh Authy setup](https://github.com/shortmesh/Authy-API#authentication). |
+| `AUTHY_SENDER` | No | - | Phone number of the device to send OTPs from. Must be registered with the Authy instance. |
 
 ## Testing
 
-Install dev dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Run the test client:
+Run the interactive test client:
 
 ```bash
 python -m tests.client
@@ -106,17 +100,20 @@ python -m tests.client
 | `send_code` | `<phone_number> <channel>` | Send an OTP to a phone number via the specified platform |
 | `verify` | `<phone_number> <code> <channel>` | Verify an OTP and provision an alias |
 | `send_message` | `<phone_number> <recipient> <subject> <message>` | Send an email via the provisioned alias |
-| `invalidate` | `<phone_number>` | Delete the alias for a phone number |
+| `invalidate` | `<phone_number>` | Disable the alias for a phone number |
 | `help` | `[command]` | Show available commands or detail for a specific one |
 | `quit` | - | Exit the client |
 
 ### Example Session
 
 ```
-mail> send_code +237123456780 wa
-{}
+relaysms-mail> send_code +237123456780 wa
+{
+  "success": true,
+  "message": "Authorization code sent."
+}
 
-mail> verify +237123456780 123456 wa
+relaysms-mail> verify +237123456780 123456 wa
 {
   "userinfo": {
     "account_identifier": "+237123456780",
@@ -124,11 +121,13 @@ mail> verify +237123456780 123456 wa
   }
 }
 
-mail> send_message +237123456780 recipient@example.com "Hello from RelaySMS" "This is a test email."
+relaysms-mail> send_message +237123456780 recipient@example.com "Hello from RelaySMS" "This is a test email."
 Sent: True
 
-mail> invalidate +237123456780
+relaysms-mail> send_message +237123456780 recipient@example.com "Report" "Please find the report attached." ~/documents/report.pdf
+
+relaysms-mail> invalidate +237123456780
 Invalidated: True
 
-mail> quit
+relaysms-mail> quit
 ```

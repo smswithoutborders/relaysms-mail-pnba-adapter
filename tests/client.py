@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import base64
 import cmd
 import json
+import shlex
+from pathlib import Path
 
 
 class MailAdapterClient(cmd.Cmd):
-    intro = "RelaySMS-Mail test client. Type 'help' for commands."
-    prompt = "mail> "
+    intro = "RelaySMS-Mail test client. Type help or ? for a list of commands."
+    prompt = "relaysms-mail> "
 
     def __init__(self, adapter):
         super().__init__()
@@ -41,15 +44,38 @@ class MailAdapterClient(cmd.Cmd):
             print(f"Error: {e}")
 
     def do_send_message(self, line):
-        """send_message <phone_number> <recipient> <subject> <message>"""
-        args = line.split(maxsplit=3)
-        if len(args) != 4:
-            print("Usage: send_message <phone_number> <recipient> <subject> <message>")
+        """send_message <phone_number> <recipient> <subject> <message> [file_path]"""
+        try:
+            args = shlex.split(line)
+        except ValueError as e:
+            print(f"Parse error: {e}")
             return
-        phone, recipient, subject, message = args
+
+        if len(args) < 4:
+            print(
+                "Usage: send_message <phone_number> <recipient> <subject> <message> [file_path]"
+            )
+            return
+
+        phone, recipient, subject, message = args[:4]
+        file_path_str = args[4] if len(args) == 5 else None
+        attachments = []
+
+        if file_path_str:
+            path = Path(file_path_str).expanduser()
+            if not path.is_file():
+                print(f"Error: Provided path is not a file or does not exist: {path}")
+                return
+            try:
+                b64_data = base64.b64encode(path.read_bytes()).decode("utf-8")
+                attachments.append({"data": b64_data})
+            except Exception as e:
+                print(f"Error reading attachment: {e}")
+                return
+
         try:
             result = self.adapter.send_message(
-                phone, recipient, message, subject=subject
+                phone, recipient, message, subject=subject, attachments=attachments
             )
             print(f"Sent: {result}")
         except Exception as e:

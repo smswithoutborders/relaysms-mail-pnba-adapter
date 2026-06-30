@@ -76,9 +76,19 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
             alias_prefix=self._build_alias_prefix(phone_number),
             mailbox_id=self._get_mailbox_id(),
             hostname=self.credentials.SL_PRIMARY_DOMAIN,
-            alias_name=f"{self._normalize_phone(phone_number)} Via RelaySMS",
+            alias_name=f"{self._normalize_phone(phone_number)} Via RelaySMS-Mail",
             note=f"Created by RelaySMS-Mail at {timestamp}.",
         )
+
+    def _get_or_create_alias(self, phone_number: str) -> AliasResponse:
+        """Return existing alias, enabling it if disabled, or create a new one."""
+        alias = self._get_alias(phone_number)
+        if alias:
+            if not alias.get("enabled"):
+                self.client.toggle_alias(alias["id"])
+                logger.debug("Re-enabled alias %s.", alias["email"])
+            return alias
+        return self._create_alias(phone_number)
 
     def send_authorization_code(self, phone_number: str, **kwargs) -> Dict[str, Any]:
         channel = kwargs.get("channel")
@@ -102,7 +112,7 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
 
         self.authy.verify_otp(phone_number=phone_number, platform=channel, code=code)
 
-        alias = self._get_alias(phone_number) or self._create_alias(phone_number)
+        alias = self._get_or_create_alias(phone_number)
 
         return {
             "userinfo": {"account_identifier": phone_number, "name": alias["email"]},
@@ -115,10 +125,11 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
 
     def invalidate_session(self, phone_number: str, **_) -> bool:
         alias = self._get_alias(phone_number)
-        if not alias:
+        if not alias or not alias.get("enabled"):
+            logger.debug("Alias not found or already disabled.")
             return True
-        self.client.delete_alias(alias["id"])
-        logger.debug("Alias deleted for %s.", phone_number)
+        self.client.toggle_alias(alias["id"])
+        logger.debug("Alias disabled successfully.")
         return True
 
     def send_message(
@@ -143,8 +154,8 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
                 raise ValueError(f"Invalid attachment data in '{filename}'.") from exc
 
         alias = self._get_alias(phone_number)
-        if not alias:
-            raise RuntimeError(f"Alias for '{phone_number}' not found.")
+        if not alias or not alias.get("enabled"):
+            raise RuntimeError(f"Alias for '{phone_number}' not found or disabled.")
 
         self.client.send_email(
             alias_id=alias["id"],
