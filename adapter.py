@@ -2,6 +2,7 @@
 
 import base64
 import re
+import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -12,6 +13,13 @@ from protocol_interfaces import PNBAProtocolInterface
 from simplelogin import AliasResponse, Attachment, SimpleLoginClient, SMTPConfig
 
 logger = get_logger(__name__)
+
+
+def _require(kwargs: dict, *fields: str) -> tuple:
+    missing = [f for f in fields if not kwargs.get(f)]
+    if missing:
+        raise ValueError(f"Missing required parameter(s): {', '.join(missing)}")
+    return tuple(kwargs[f] for f in fields)
 
 
 class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
@@ -90,10 +98,60 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
             return alias
         return self._create_alias(phone_number)
 
+    def _get_or_create_pooled_random_alias(self) -> AliasResponse:
+        pool_aliases = self.client.fetch_aliases(
+            query=self.credentials.RANDOM_ALIAS_PREFIX,
+            mailbox_email=self.credentials.SL_PRIMARY_EMAIL,
+        )
+
+        pool_limit = self.credentials.RANDOM_ALIAS_POOL_SIZE
+
+        if len(pool_aliases) >= pool_limit:
+            selected_alias = secrets.choice(pool_aliases)
+            logger.debug(
+                "Random alias pool full (%d/%d). Reusing: %s",
+                len(pool_aliases),
+                pool_limit,
+                selected_alias["email"],
+            )
+            return selected_alias
+
+        random_id = secrets.token_hex(self.credentials.RANDOM_ALIAS_ID_BYTES)
+        alias_prefix = f"{self.credentials.RANDOM_ALIAS_PREFIX}{random_id}"
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S (%Z)")
+
+        logger.debug(
+            "Expanding random alias pool allocation size (%d/%d).",
+            len(pool_aliases) + 1,
+            pool_limit,
+        )
+        return self.client.create_alias(
+            alias_prefix=alias_prefix,
+            mailbox_id=self._get_mailbox_id(),
+            hostname=self.credentials.SL_PRIMARY_DOMAIN,
+            alias_name="RelaySMS-Mail No-Reply",
+            note=f"Created by RelaySMS-Mail No-Reply pool worker at {timestamp}.",
+        )
+
+    def _send_email(
+        self,
+        alias: AliasResponse,
+        to_email: str,
+        subject: str,
+        message: str,
+        attachments: list,
+    ) -> None:
+        self.client.send_email(
+            alias_id=alias["id"],
+            from_email=self.credentials.SL_PRIMARY_EMAIL,
+            to_email=to_email,
+            subject=subject,
+            body=message,
+            attachments=attachments,
+        )
+
     def send_authorization_code(self, phone_number: str, **kwargs) -> Dict[str, Any]:
-        channel = kwargs.get("channel")
-        if not channel:
-            raise ValueError("Missing required 'channel' parameter.")
+        (channel,) = _require(kwargs, "channel")
 
         self.authy.generate_otp(
             phone_number=phone_number,
@@ -106,9 +164,7 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
     def validate_code_and_fetch_user_info(
         self, phone_number: str, code: str, **kwargs
     ) -> Dict[str, Any]:
-        channel = kwargs.get("channel")
-        if not channel:
-            raise ValueError("Missing required 'channel' parameter.")
+        (channel,) = _require(kwargs, "channel")
 
         self.authy.verify_otp(phone_number=phone_number, platform=channel, code=code)
 
@@ -119,7 +175,7 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
         }
 
     def validate_password_and_fetch_user_info(
-        self, phone_number: str, password: str, **kwargs
+        self, phone_number: str, password: str, **_
     ) -> Dict[str, Any]:
         return {}
 
@@ -128,16 +184,12 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
         if not alias or not alias.get("enabled"):
             logger.debug("Alias not found or already disabled.")
             return True
-        self.client.toggle_alias(alias["id"])
+        self.client.delete_alias(alias["id"])
         logger.debug("Alias disabled successfully.")
         return True
 
-    def send_message(
-        self, phone_number: str, recipient: str, message: str, **kwargs
-    ) -> bool:
-        subject = kwargs.get("subject")
-        if not subject:
-            raise ValueError("Missing required 'subject' parameter.")
+    def send_message(self, phone_number: Optional[str] = None, **kwargs) -> bool:
+        subject, to_email, message = _require(kwargs, "subject", "to_email", "message")
 
         processed_attachments = []
         for idx, att_dict in enumerate(kwargs.get("attachments") or []):
@@ -153,16 +205,12 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
             except Exception as exc:
                 raise ValueError(f"Invalid attachment data in '{filename}'.") from exc
 
-        alias = self._get_alias(phone_number)
-        if not alias or not alias.get("enabled"):
-            raise RuntimeError(f"Alias for '{phone_number}' not found or disabled.")
+        if phone_number:
+            alias = self._get_alias(phone_number)
+            if not alias or not alias.get("enabled"):
+                raise RuntimeError(f"Alias for '{phone_number}' not found or disabled.")
+        else:
+            alias = self._get_or_create_pooled_random_alias()
 
-        self.client.send_email(
-            alias_id=alias["id"],
-            from_email=self.credentials.SL_PRIMARY_EMAIL,
-            to_email=recipient,
-            subject=subject,
-            body=message,
-            attachments=processed_attachments,
-        )
+        self._send_email(alias, to_email, subject, message, processed_attachments)
         return True

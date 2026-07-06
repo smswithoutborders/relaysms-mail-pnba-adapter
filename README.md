@@ -20,21 +20,21 @@ sudo apt install build-essential python3-dev libmagic1
 
 1. **Create a virtual environment:**
 
-   ```bash
-   python3 -m venv venv
-   ```
+```bash
+python3 -m venv venv
+```
 
 2. **Activate the virtual environment:**
 
-   ```bash
-   . venv/bin/activate
-   ```
+```bash
+. venv/bin/activate
+```
 
 3. **Install the required Python packages:**
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
 ## Configuration
 
@@ -45,7 +45,7 @@ Set the `credentials.json` path in `manifest.ini`:
 path = ./credentials.json
 ```
 
-**Sample `credentials.json`**
+**Sample `credentials.json**`
 
 ```json
 {
@@ -59,8 +59,11 @@ path = ./credentials.json
   "SMTP_USE_TLS": true,
   "ALIAS_PREFIX": "",
   "ALIAS_SUFFIX": "",
-  "SL_BASE_URL": "https://app.simplelogin.io/api",
-  "AUTHY_BASE_URL": "https://authy.shortmesh.com",
+  "RANDOM_ALIAS_PREFIX": "rmail-",
+  "RANDOM_ALIAS_ID_BYTES": 4,
+  "RANDOM_ALIAS_POOL_SIZE": 15,
+  "SL_BASE_URL": "[https://app.simplelogin.io/api](https://app.simplelogin.io/api)",
+  "AUTHY_BASE_URL": "[https://authy.shortmesh.com](https://authy.shortmesh.com)",
   "AUTHY_TOKEN": "mt_xxxxx",
   "AUTHY_SENDER": "+237123456789"
 }
@@ -69,7 +72,7 @@ path = ./credentials.json
 **Field reference**
 
 | Field | Required | Default | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `SL_PRIMARY_EMAIL` | Yes | - | Your SimpleLogin account email or the mailbox email you want aliases forwarded to. See [SimpleLogin mailboxes](https://app.simplelogin.io/dashboard/mailbox). |
 | `SL_PRIMARY_DOMAIN` | Yes | - | The custom domain used for alias generation. Must be verified in SimpleLogin. See [custom domains](https://app.simplelogin.io/dashboard/custom_domain). |
 | `SL_API_KEY` | Yes | - | Your SimpleLogin API key. Generate one at [SimpleLogin API Keys](https://app.simplelogin.io/dashboard/api_key). |
@@ -78,8 +81,11 @@ path = ./credentials.json
 | `SMTP_USERNAME` | Yes | - | SMTP login username, usually your email address. |
 | `SMTP_PASSWORD` | Yes | - | SMTP login password or app password. See your provider's SMTP docs (e.g. [Gmail](https://support.google.com/mail/answer/185833), [Proton](https://proton.me/support/smtp-submission)). |
 | `SMTP_USE_TLS` | No | `true` | `true` for port 465 (SMTP_SSL), `false` for port 587 (STARTTLS). |
-| `ALIAS_PREFIX` | No | `""` | Static prefix prepended to all generated aliases. |
-| `ALIAS_SUFFIX` | No | `""` | Static suffix appended to all generated aliases. |
+| `ALIAS_PREFIX` | No | `""` | Static prefix prepended to phone-bound authenticated aliases. |
+| `ALIAS_SUFFIX` | No | `""` | Static suffix appended to phone-bound authenticated aliases. |
+| `RANDOM_ALIAS_PREFIX` | No | `"rmail-"` | Prefix string applied to unauthenticated/pooled fallback aliases to comply with anti-spam heuristics. |
+| `RANDOM_ALIAS_ID_BYTES` | No | `4` | Byte-entropy count transformed into a hexadecimal suffix appended to random pool extensions (e.g., 4 bytes yields 8 characters). |
+| `RANDOM_ALIAS_POOL_SIZE` | No | `15` | Upper limit allocation bounds for the unauthenticated alias pool. When full, existing pool items are randomly selected and reused. |
 | `SL_BASE_URL` | No | `https://app.simplelogin.io/api` | SimpleLogin API base URL. Override for self-hosted instances. |
 | `AUTHY_BASE_URL` | No | `https://authy.shortmesh.com` | Shortmesh Authy API base URL. Override for self-hosted instances. |
 | `AUTHY_TOKEN` | No | - | Matrix Bearer token for authenticating with Authy. See [Shortmesh Authy setup](https://github.com/shortmesh/Authy-API#authentication). |
@@ -96,11 +102,11 @@ python -m tests.client
 ### Available Commands
 
 | Command | Arguments | Description |
-|---|---|---|
+| --- | --- | --- |
 | `send_code` | `<phone_number> <channel>` | Send an OTP to a phone number via the specified platform |
 | `verify` | `<phone_number> <code> <channel>` | Verify an OTP and provision an alias |
-| `send_message` | `<phone_number> <recipient> <subject> <message>` | Send an email via the provisioned alias |
-| `invalidate` | `<phone_number>` | Disable the alias for a phone number |
+| `send_message` | `<phone_number_or_none> <recipient> <subject> <message> [file_path]` | Send an email via an alias. Pass `-` to invoke the unauthenticated random alias routing pool. |
+| `invalidate` | `<phone_number>` | Disable the authenticated alias mapped to a phone number |
 | `help` | `[command]` | Show available commands or detail for a specific one |
 | `quit` | - | Exit the client |
 
@@ -122,6 +128,9 @@ relaysms-mail> verify +237123456780 123456 wa
 }
 
 relaysms-mail> send_message +237123456780 recipient@example.com "Hello from RelaySMS" "This is a test email."
+Sent: True
+
+relaysms-mail> send_message - recipient@example.com "Hello from RelaySMS" "This is a test email."
 Sent: True
 
 relaysms-mail> send_message +237123456780 recipient@example.com "Report" "Please find the report attached." ~/documents/report.pdf

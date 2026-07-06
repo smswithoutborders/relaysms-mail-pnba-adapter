@@ -22,6 +22,9 @@ class Credentials:
     SMTP_USE_TLS: bool = True
     ALIAS_PREFIX: str = ""
     ALIAS_SUFFIX: str = ""
+    RANDOM_ALIAS_PREFIX: str = "rmail-"
+    RANDOM_ALIAS_ID_BYTES: int = 4
+    RANDOM_ALIAS_POOL_SIZE: int = 15
     SL_BASE_URL: str = "https://app.simplelogin.io/api"
     AUTHY_BASE_URL: str = "https://authy.shortmesh.com"
     AUTHY_TOKEN: Optional[str] = field(default=None)

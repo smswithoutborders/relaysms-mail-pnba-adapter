@@ -44,7 +44,7 @@ class MailAdapterClient(cmd.Cmd):
             print(f"Error: {e}")
 
     def do_send_message(self, line):
-        """send_message <phone_number> <recipient> <subject> <message> [file_path]"""
+        """send_message <phone_number_or_none> <recipient> <subject> <message> [file_path]"""
         try:
             args = shlex.split(line)
         except ValueError as e:
@@ -53,13 +53,16 @@ class MailAdapterClient(cmd.Cmd):
 
         if len(args) < 4:
             print(
-                "Usage: send_message <phone_number> <recipient> <subject> <message> [file_path]"
+                "Usage: send_message <phone_number_or_none> <recipient> <subject> <message> [file_path]\n"
+                "Tip: Pass '-' to skip phone lookup and trigger a random alias."
             )
             return
 
-        phone, recipient, subject, message = args[:4]
+        phone_arg, recipient, subject, message = args[:4]
         file_path_str = args[4] if len(args) == 5 else None
         attachments = []
+
+        phone = None if phone_arg.lower() in ("-") else phone_arg
 
         if file_path_str:
             path = Path(file_path_str).expanduser()
@@ -75,7 +78,11 @@ class MailAdapterClient(cmd.Cmd):
 
         try:
             result = self.adapter.send_message(
-                phone, recipient, message, subject=subject, attachments=attachments
+                phone_number=phone,
+                to_email=recipient,
+                message=message,
+                subject=subject,
+                attachments=attachments,
             )
             print(f"Sent: {result}")
         except Exception as e:
