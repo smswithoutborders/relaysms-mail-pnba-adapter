@@ -184,7 +184,7 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
         if not alias or not alias.get("enabled"):
             logger.debug("Alias not found or already disabled.")
             return True
-        self.client.delete_alias(alias["id"])
+        self.client.toggle_alias(alias["id"])
         logger.debug("Alias disabled successfully.")
         return True
 

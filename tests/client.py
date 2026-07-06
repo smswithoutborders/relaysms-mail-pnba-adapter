@@ -62,7 +62,7 @@ class MailAdapterClient(cmd.Cmd):
         file_path_str = args[4] if len(args) == 5 else None
         attachments = []
 
-        phone = None if phone_arg.lower() in ("-") else phone_arg
+        phone = None if phone_arg.lower() == "-" else phone_arg
 
         if file_path_str:
             path = Path(file_path_str).expanduser()
