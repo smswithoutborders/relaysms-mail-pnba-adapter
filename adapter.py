@@ -98,39 +98,17 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
             return alias
         return self._create_alias(phone_number)
 
-    def _get_or_create_pooled_random_alias(self) -> AliasResponse:
-        pool_aliases = self.client.fetch_aliases(
-            query=self.credentials.RANDOM_ALIAS_PREFIX,
-            mailbox_email=self.credentials.SL_PRIMARY_EMAIL,
-        )
-
-        pool_limit = self.credentials.RANDOM_ALIAS_POOL_SIZE
-
-        if len(pool_aliases) >= pool_limit:
-            selected_alias = secrets.choice(pool_aliases)
-            logger.debug(
-                "Random alias pool full (%d/%d). Reusing: %s",
-                len(pool_aliases),
-                pool_limit,
-                selected_alias["email"],
-            )
-            return selected_alias
-
+    def _create_random_alias(self) -> AliasResponse:
         random_id = secrets.token_hex(self.credentials.RANDOM_ALIAS_ID_BYTES)
         alias_prefix = f"{self.credentials.RANDOM_ALIAS_PREFIX}{random_id}"
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S (%Z)")
 
-        logger.debug(
-            "Expanding random alias pool allocation size (%d/%d).",
-            len(pool_aliases) + 1,
-            pool_limit,
-        )
         return self.client.create_alias(
             alias_prefix=alias_prefix,
             mailbox_id=self._get_mailbox_id(),
             hostname=self.credentials.SL_PRIMARY_DOMAIN,
             alias_name="RelaySMS-Mail No-Reply",
-            note=f"Created by RelaySMS-Mail No-Reply pool worker at {timestamp}.",
+            note=f"Created by RelaySMS-Mail No-Reply at {timestamp}.",
         )
 
     def _send_email(
@@ -210,7 +188,7 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
             if not alias or not alias.get("enabled"):
                 raise RuntimeError(f"Alias for '{phone_number}' not found or disabled.")
         else:
-            alias = self._get_or_create_pooled_random_alias()
+            alias = self._create_random_alias()
 
         self._send_email(alias, to_email, subject, message, processed_attachments)
         return True
