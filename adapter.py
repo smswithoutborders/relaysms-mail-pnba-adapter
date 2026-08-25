@@ -131,13 +131,17 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
     def send_authorization_code(self, phone_number: str, **kwargs) -> Dict[str, Any]:
         (channel,) = _require(kwargs, "channel")
 
-        self.authy.generate_otp(
+        otp = self.authy.generate_otp(
             phone_number=phone_number,
             platform=channel,
             sender=self.credentials.AUTHY_SENDER,
         )
 
-        return {"success": True, "message": "Authorization code sent."}
+        return {
+            "success": True,
+            "message": "Authorization code sent.",
+            "expires_at": otp["expires_at"],
+        }
 
     def validate_code_and_fetch_user_info(
         self, phone_number: str, code: str, **kwargs

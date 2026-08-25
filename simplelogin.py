@@ -6,6 +6,7 @@ API docs: https://github.com/simple-login/app/blob/master/docs/api.md
 
 import mimetypes
 import smtplib
+import ssl
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from typing import Any, Optional, TypedDict
@@ -303,15 +304,16 @@ def _build_message(
 
 
 def _deliver(msg: EmailMessage, smtp: SMTPConfig) -> None:
+    context = ssl.create_default_context()
     if smtp.port == 465:
-        with smtplib.SMTP_SSL(smtp.host, smtp.port) as conn:
+        with smtplib.SMTP_SSL(smtp.host, smtp.port, context=context) as conn:
             conn.login(smtp.username, smtp.password)
             conn.send_message(msg)
     else:
         with smtplib.SMTP(smtp.host, smtp.port) as conn:
             conn.ehlo()
             if conn.has_extn("STARTTLS") or smtp.use_tls:
-                conn.starttls()
+                conn.starttls(context=context)
                 conn.ehlo()
             conn.login(smtp.username, smtp.password)
             conn.send_message(msg)
