@@ -10,6 +10,7 @@ from authy import AuthyClient
 from config import Credentials, load_credentials
 from logutils import get_logger
 from protocol_interfaces import PNBAProtocolInterface
+from random_alias_store import RandomAliasStore
 from simplelogin import AliasResponse, Attachment, SimpleLoginClient, SMTPConfig
 
 logger = get_logger(__name__)
@@ -41,6 +42,9 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
         self.authy: AuthyClient = AuthyClient(
             base_url=self.credentials.AUTHY_BASE_URL,
             token=self.credentials.AUTHY_TOKEN,
+        )
+        self.random_alias_store: RandomAliasStore = RandomAliasStore(
+            self.credentials.RANDOM_ALIAS_DB_PATH
         )
 
     def _normalize_phone(self, phone_number: str) -> str:
@@ -98,18 +102,37 @@ class RelaySMSMailPNBAAdapter(PNBAProtocolInterface):
             return alias
         return self._create_alias(phone_number)
 
+    def _reserve_random_alias_prefix(self) -> str:
+        max_attempts = 10
+        for _ in range(max_attempts):
+            random_id = secrets.token_hex(self.credentials.RANDOM_ALIAS_ID_BYTES)
+            alias_prefix = f"{self.credentials.RANDOM_ALIAS_PREFIX}{random_id}"
+            if self.random_alias_store.register(alias_prefix):
+                return alias_prefix
+            logger.debug("Random alias prefix '%s' already registered.", alias_prefix)
+        raise RuntimeError(
+            f"Failed to allocate a unique random alias after {max_attempts} attempts."
+        )
+
     def _create_random_alias(self) -> AliasResponse:
-        random_id = secrets.token_hex(self.credentials.RANDOM_ALIAS_ID_BYTES)
-        alias_prefix = f"{self.credentials.RANDOM_ALIAS_PREFIX}{random_id}"
+        alias_prefix = self._reserve_random_alias_prefix()
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S (%Z)")
 
-        return self.client.create_alias(
-            alias_prefix=alias_prefix,
-            mailbox_id=self._get_mailbox_id(),
-            hostname=self.credentials.SL_PRIMARY_DOMAIN,
-            alias_name="RelaySMS-Mail No-Reply",
-            note=f"Created by RelaySMS-Mail No-Reply at {timestamp}.",
-        )
+        try:
+            alias = self.client.create_alias(
+                alias_prefix=alias_prefix,
+                mailbox_id=self._get_mailbox_id(),
+                hostname=self.credentials.SL_PRIMARY_DOMAIN,
+                alias_name="RelaySMS-Mail No-Reply",
+                note=f"Created by RelaySMS-Mail No-Reply at {timestamp}.",
+            )
+        except Exception as exc:
+            self.random_alias_store.remove(alias_prefix)
+            logger.error("Failed to create random alias '%s': %s", alias_prefix, exc)
+            raise
+
+        logger.info("Created random alias %s.", alias["email"])
+        return alias
 
     def _send_email(
         self,

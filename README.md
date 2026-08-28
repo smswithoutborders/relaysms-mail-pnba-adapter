@@ -86,6 +86,7 @@ path = ./credentials.json
 | `RANDOM_ALIAS_PREFIX` | No | `"rmail-"` | Prefix string applied to unauthenticated/pooled fallback aliases to comply with anti-spam heuristics. |
 | `RANDOM_ALIAS_ID_BYTES` | No | `4` | Byte-entropy count transformed into a hexadecimal suffix appended to random pool extensions (e.g., 4 bytes yields 8 characters). |
 | `RANDOM_ALIAS_POOL_SIZE` | No | `15` | Upper limit allocation bounds for the unauthenticated alias pool. When full, existing pool items are randomly selected and reused. |
+| `RANDOM_ALIAS_DB_PATH` | No | `"random_aliases.db"` | Path to an SQLite database used to track random alias prefixes. |
 | `SL_BASE_URL` | No | `https://app.simplelogin.io/api` | SimpleLogin API base URL. Override for self-hosted instances. |
 | `AUTHY_BASE_URL` | No | `https://authy.shortmesh.com` | Shortmesh Authy API base URL. Override for self-hosted instances. |
 | `AUTHY_TOKEN` | No | - | Matrix Bearer token for authenticating with Authy. See [Shortmesh Authy setup](https://github.com/shortmesh/Authy-API#authentication). |

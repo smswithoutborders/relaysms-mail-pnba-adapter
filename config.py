@@ -25,6 +25,7 @@ class Credentials:
     RANDOM_ALIAS_PREFIX: str = "relaysms-"
     RANDOM_ALIAS_ID_BYTES: int = 4
     RANDOM_ALIAS_POOL_SIZE: int = 15
+    RANDOM_ALIAS_DB_PATH: str = "random_aliases.db"
     SL_BASE_URL: str = "https://app.simplelogin.io/api"
     AUTHY_BASE_URL: str = "https://authy.shortmesh.com"
     AUTHY_TOKEN: Optional[str] = field(default=None)
@@ -42,15 +43,19 @@ _REQUIRED_FIELDS = {
 }
 
 
+def resolve_path(raw_path: str) -> Path:
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = Path(__file__).parent / path
+    return path
+
+
 def _resolve_creds_path(configs: Dict[str, Any]) -> Path:
     creds_config = configs.get("credentials", {})
     raw_path = creds_config.get("path", "")
     if not raw_path:
         raise ValueError("Missing 'credentials.path' in configuration.")
-    path = Path(raw_path).expanduser()
-    if not path.is_absolute():
-        path = Path(__file__).parent / path
-    return path
+    return resolve_path(raw_path)
 
 
 def _validate_and_clean_creds(creds: Dict[str, Any]) -> None:
