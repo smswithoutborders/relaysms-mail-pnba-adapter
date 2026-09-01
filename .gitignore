@@ -175,3 +175,6 @@ cython_debug/
 credentials.json
 *.db
 *.db-journal
+*.sqlite3
+*.sqlite3-journal
+/data/

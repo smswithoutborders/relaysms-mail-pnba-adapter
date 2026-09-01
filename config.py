@@ -9,6 +9,11 @@ from logutils import get_logger
 
 logger = get_logger(__name__)
 
+_PACKAGE_DIR = Path(__file__).parent
+
+DEFAULT_RANDOM_ALIAS_DIRNAME = "data"
+DEFAULT_RANDOM_ALIAS_DB_FILENAME = "random_aliases.sqlite3"
+
 
 @dataclass
 class Credentials:
@@ -25,11 +30,19 @@ class Credentials:
     RANDOM_ALIAS_PREFIX: str = "relaysms-"
     RANDOM_ALIAS_ID_BYTES: int = 4
     RANDOM_ALIAS_POOL_SIZE: int = 15
-    RANDOM_ALIAS_DB_PATH: str = "random_aliases.db"
+    RANDOM_ALIAS_DIR: Optional[str] = None
+    RANDOM_ALIAS_DB_FILENAME: str = DEFAULT_RANDOM_ALIAS_DB_FILENAME
     SL_BASE_URL: str = "https://app.simplelogin.io/api"
     AUTHY_BASE_URL: str = "https://authy.shortmesh.com"
     AUTHY_TOKEN: Optional[str] = field(default=None)
     AUTHY_SENDER: Optional[str] = field(default=None)
+
+    def random_alias_dir(self, base_path: Optional[str] = None) -> Path:
+        if base_path:
+            return Path(base_path).expanduser()
+        if self.RANDOM_ALIAS_DIR:
+            return Path(self.RANDOM_ALIAS_DIR).expanduser()
+        return _PACKAGE_DIR / DEFAULT_RANDOM_ALIAS_DIRNAME
 
 
 _REQUIRED_FIELDS = {
