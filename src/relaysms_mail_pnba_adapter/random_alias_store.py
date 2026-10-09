@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Registry of generated random alias prefixes."""
 
+import logging
 import sqlite3
-from typing import Optional
 
-from config import Credentials
-from logutils import get_logger
+from relaysms_adapter_sdk import state_dir
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS random_aliases (
@@ -18,16 +17,8 @@ CREATE TABLE IF NOT EXISTS random_aliases (
 
 
 class RandomAliasStore:
-    def __init__(
-        self, credentials: Credentials, base_path: Optional[str] = None
-    ) -> None:
-        db_path = (
-            credentials.random_alias_dir(base_path)
-            / credentials.RANDOM_ALIAS_DB_FILENAME
-        )
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        self._conn = sqlite3.connect(str(db_path))
+    def __init__(self, filename: str) -> None:
+        self._conn = sqlite3.connect(state_dir() / filename)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.execute(_SCHEMA)

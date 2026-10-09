@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-from typing import Any, Optional, Union
+import logging
+from typing import Any
 
 import requests
 
-from logutils import get_logger
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class HTTPError(Exception):
@@ -27,7 +26,7 @@ class HTTPClient:
     def __init__(
         self,
         base_url: str,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         timeout: int = _TIMEOUT,
     ) -> None:
         self._base_url = base_url.rstrip("/")
@@ -56,7 +55,7 @@ class HTTPClient:
         return _handle(response)
 
 
-def _handle(response: requests.Response) -> Union[dict[str, Any], list]:
+def _handle(response: requests.Response) -> dict[str, Any] | list:
     try:
         response.raise_for_status()
         data = response.json()

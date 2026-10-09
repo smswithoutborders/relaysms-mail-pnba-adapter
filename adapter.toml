@@ -1,0 +1,11 @@
+entry = "relaysms_mail_pnba_adapter:RelaySMSMailAdapter"
+name = "rmail"
+display_name = "RelaySMS Mail"
+protocol = "pnba"
+category = "email"
+offline_first = true
+auth_provider = "shortmesh-authy"
+
+[icons]
+svg = "https://raw.githubusercontent.com/smswithoutborders/relaysms-mail-pnba-adapter/main/icons/relaysms-mail.svg"
+png = "https://raw.githubusercontent.com/smswithoutborders/relaysms-mail-pnba-adapter/main/icons/relaysms-mail.png"

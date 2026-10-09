@@ -1,51 +1,10 @@
-# RelaySMS-Mail Platform Adapter
+# RelaySMS Mail PNBA Platform Adapter
 
-This adapter provides a pluggable implementation for integrating email as a messaging platform via [SimpleLogin](https://simplelogin.io). It is designed to work with [RelaySMS Publisher](https://github.com/smswithoutborders/RelaySMS-Publisher), enabling users to send and receive emails through automatically provisioned aliases, with OTP-based authentication handled by [Shortmesh Authy](https://github.com/shortmesh/Authy-API).
+Gives [RelaySMS Publisher](https://github.com/smswithoutborders/RelaySMS-Publisher) users an email alias tied to their phone number, and sends email from it through [SimpleLogin](https://simplelogin.io). Codes are sent with [Shortmesh Authy](https://github.com/shortmesh/Authy-API). Offline sends, with no linked account, go out from a new random alias. Built with the [RelaySMS Adapter SDK](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk).
 
-## Requirements
+## Credentials
 
-- **Python**: Version >= [3.10](https://www.python.org/downloads/)
-- **Python Virtual Environments**: [Documentation](https://docs.python.org/3/tutorial/venv.html)
-- **libmagic**: For MIME type detection from attachment bytes
-
-## Dependencies
-
-### On Ubuntu
-
-```bash
-sudo apt install build-essential python3-dev libmagic1
-```
-
-## Installation
-
-1. **Create a virtual environment:**
-
-```bash
-python3 -m venv venv
-```
-
-2. **Activate the virtual environment:**
-
-```bash
-. venv/bin/activate
-```
-
-3. **Install the required Python packages:**
-
-```bash
-pip install -r requirements.txt
-```
-
-## Configuration
-
-Set the `credentials.json` path in `manifest.ini`:
-
-```ini
-[credentials]
-path = ./credentials.json
-```
-
-**Sample `credentials.json**`
+Put `credentials.json` in the adapter's config directory. The Publisher keeps it at `data/platforms/config/<adapter id>/credentials.json`.
 
 ```json
 {
@@ -59,17 +18,14 @@ path = ./credentials.json
   "SMTP_USE_TLS": true,
   "ALIAS_PREFIX": "",
   "ALIAS_SUFFIX": "",
-  "RANDOM_ALIAS_PREFIX": "rmail-",
+  "RANDOM_ALIAS_PREFIX": "relaysms-",
   "RANDOM_ALIAS_ID_BYTES": 4,
-  "RANDOM_ALIAS_POOL_SIZE": 15,
-  "SL_BASE_URL": "[https://app.simplelogin.io/api](https://app.simplelogin.io/api)",
-  "AUTHY_BASE_URL": "[https://authy.shortmesh.com](https://authy.shortmesh.com)",
+  "SL_BASE_URL": "https://app.simplelogin.io/api",
+  "AUTHY_BASE_URL": "https://authy.shortmesh.com",
   "AUTHY_TOKEN": "mt_xxxxx",
   "AUTHY_SENDER": "+237123456789"
 }
 ```
-
-**Field reference**
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -83,62 +39,26 @@ path = ./credentials.json
 | `SMTP_USE_TLS` | No | `true` | `true` for port 465 (SMTP_SSL), `false` for port 587 (STARTTLS). |
 | `ALIAS_PREFIX` | No | `""` | Static prefix prepended to phone-bound authenticated aliases. |
 | `ALIAS_SUFFIX` | No | `""` | Static suffix appended to phone-bound authenticated aliases. |
-| `RANDOM_ALIAS_PREFIX` | No | `"rmail-"` | Prefix string applied to unauthenticated/pooled fallback aliases to comply with anti-spam heuristics. |
+| `RANDOM_ALIAS_PREFIX` | No | `"relaysms-"` | Prefix string applied to unauthenticated/pooled fallback aliases to comply with anti-spam heuristics. |
 | `RANDOM_ALIAS_ID_BYTES` | No | `4` | Byte-entropy count transformed into a hexadecimal suffix appended to random pool extensions (e.g., 4 bytes yields 8 characters). |
-| `RANDOM_ALIAS_POOL_SIZE` | No | `15` | Upper limit allocation bounds for the unauthenticated alias pool. When full, existing pool items are randomly selected and reused. |
-| `RANDOM_ALIAS_DIR` | No | - | Directory for the random-alias SQLite registry. |
-| `RANDOM_ALIAS_DB_FILENAME` | No | `"random_aliases.sqlite3"` | Filename of the SQLite database used to track random alias prefixes. |
+| `RANDOM_ALIAS_DB_FILENAME` | No | `"random_aliases.sqlite3"` | SQLite file in the adapter's state directory that tracks random alias prefixes. |
 | `SL_BASE_URL` | No | `https://app.simplelogin.io/api` | SimpleLogin API base URL. Override for self-hosted instances. |
 | `AUTHY_BASE_URL` | No | `https://authy.shortmesh.com` | Shortmesh Authy API base URL. Override for self-hosted instances. |
 | `AUTHY_TOKEN` | No | - | Matrix Bearer token for authenticating with Authy. See [Shortmesh Authy setup](https://github.com/shortmesh/Authy-API#authentication). |
 | `AUTHY_SENDER` | No | - | Phone number of the device to send OTPs from. Must be registered with the Authy instance. |
 
-## Testing
-
-Run the interactive test client:
+## Develop
 
 ```bash
-python -m tests.client
+python3 -m venv venv
+venv/bin/pip install -e '.[dev]'
+venv/bin/pytest
 ```
 
-### Available Commands
+To try it, put `credentials.json` in `.relaysms/config/` and use the [`relaysms-adapter`](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk#try-it) console. `--channel` is the Authy platform the code goes out on, such as `wa`.
 
-| Command | Arguments | Description |
-| --- | --- | --- |
-| `send_code` | `<phone_number> <channel>` | Send an OTP to a phone number via the specified platform |
-| `verify` | `<phone_number> <code> <channel>` | Verify an OTP and provision an alias |
-| `send_message` | `<phone_number_or_none> <recipient> <subject> <message> [file_path]` | Send an email via an alias. Pass `-` to invoke the unauthenticated random alias routing pool. |
-| `invalidate` | `<phone_number>` | Disable the authenticated alias mapped to a phone number |
-| `help` | `[command]` | Show available commands or detail for a specific one |
-| `quit` | - | Exit the client |
-
-### Example Session
-
-```
-relaysms-mail> send_code +237123456780 wa
-{
-  "success": true,
-  "message": "Authorization code sent."
-}
-
-relaysms-mail> verify +237123456780 123456 wa
-{
-  "userinfo": {
-    "account_identifier": "+237123456780",
-    "name": "237123456780@example.com"
-  }
-}
-
-relaysms-mail> send_message +237123456780 recipient@example.com "Hello from RelaySMS" "This is a test email."
-Sent: True
-
-relaysms-mail> send_message - recipient@example.com "Hello from RelaySMS" "This is a test email."
-Sent: True
-
-relaysms-mail> send_message +237123456780 recipient@example.com "Report" "Please find the report attached." ~/documents/report.pdf
-
-relaysms-mail> invalidate +237123456780
-Invalidated: True
-
-relaysms-mail> quit
+```bash
+venv/bin/relaysms-adapter link --phone +237600000000 --channel wa
+venv/bin/relaysms-adapter send --to you@example.com --subject Hi --body hello
+venv/bin/relaysms-adapter send --offline --to you@example.com --subject Hi --body hello
 ```
