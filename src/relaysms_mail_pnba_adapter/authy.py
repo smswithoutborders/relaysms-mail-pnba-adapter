@@ -4,12 +4,12 @@ Shortmesh Authy API client.
 API docs: https://github.com/shortmesh/Authy-API/blob/main/docs/USAGE.md
 """
 
-from typing import Optional, TypedDict
+import logging
+from typing import TypedDict
 
-from httpclient import HTTPClient, HTTPError
-from logutils import get_logger
+from relaysms_mail_pnba_adapter.httpclient import HTTPClient, HTTPError
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class OTPResponse(TypedDict):
@@ -39,7 +39,7 @@ class AuthyClient:
                and enables the ``sender`` field on OTP generation.
     """
 
-    def __init__(self, base_url: str, token: Optional[str] = None) -> None:
+    def __init__(self, base_url: str, token: str | None = None) -> None:
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         self._http = HTTPClient(base_url=base_url, headers=headers)
 
@@ -47,7 +47,7 @@ class AuthyClient:
         self,
         phone_number: str,
         platform: str,
-        sender: Optional[str] = None,
+        sender: str | None = None,
     ) -> OTPResponse:
         """Request an OTP be sent to ``phone_number`` on ``platform``.
 

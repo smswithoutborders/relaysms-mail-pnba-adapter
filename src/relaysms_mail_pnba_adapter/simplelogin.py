@@ -4,17 +4,17 @@ SimpleLogin API client with SMTP delivery support.
 API docs: https://github.com/simple-login/app/blob/master/docs/api.md
 """
 
+import logging
 import mimetypes
 import smtplib
 import ssl
 from dataclasses import dataclass, field
 from email.message import EmailMessage
-from typing import Any, Optional, TypedDict
+from typing import Any, TypedDict
 
-from httpclient import HTTPClient, HTTPError
-from logutils import get_logger
+from relaysms_mail_pnba_adapter.httpclient import HTTPClient, HTTPError
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class SuffixOption(TypedDict):
@@ -66,7 +66,7 @@ class SMTPConfig:
 class Attachment:
     data: bytes
     filename: str
-    mimetype: Optional[str] = field(default=None)
+    mimetype: str | None = field(default=None)
 
     def __post_init__(self) -> None:
         if not self.data:
@@ -107,7 +107,7 @@ class SimpleLoginClient:
             headers={"Authentication": api_key},
         )
 
-    def fetch_suffix(self, hostname: str) -> Optional[SuffixOption]:
+    def fetch_suffix(self, hostname: str) -> SuffixOption | None:
         """Return the signed suffix for ``hostname``, or ``None``."""
         try:
             data: SuffixListResponse = self._http.get(
@@ -130,7 +130,7 @@ class SimpleLoginClient:
         return suffix
 
     def fetch_aliases(
-        self, query: Optional[str] = None, mailbox_email: Optional[str] = None
+        self, query: str | None = None, mailbox_email: str | None = None
     ) -> list[AliasResponse]:
         payload: dict[str, Any] = {"query": query} if query else {}
         try:
@@ -166,10 +166,14 @@ class SimpleLoginClient:
         alias_prefix: str,
         mailbox_id: int,
         hostname: str,
-        note: Optional[str] = None,
-        alias_name: Optional[str] = None,
+        note: str | None = None,
+        alias_name: str | None = None,
     ) -> AliasResponse:
-        """Create a new alias. Raises ``SimpleLoginError`` if no suffix exists for ``hostname``."""
+        """Create a new alias.
+
+        Raises:
+            SimpleLoginError: No suffix exists for hostname.
+        """
         suffix = self.fetch_suffix(hostname)
         if suffix is None:
             raise SimpleLoginError(f"No suffix available for hostname '{hostname}'.")
@@ -204,7 +208,7 @@ class SimpleLoginClient:
         logger.debug("Fetched %d mailboxes.", len(data["mailboxes"]))
         return data["mailboxes"]
 
-    def fetch_mailbox_by_email(self, email: str) -> Optional[MailboxResponse]:
+    def fetch_mailbox_by_email(self, email: str) -> MailboxResponse | None:
         mailbox = next(
             (mb for mb in self.fetch_mailboxes() if mb.get("email") == email),
             None,
@@ -236,8 +240,8 @@ class SimpleLoginClient:
         to_email: str,
         subject: str,
         body: str,
-        body_html: Optional[str] = None,
-        attachments: Optional[list[Attachment]] = None,
+        body_html: str | None = None,
+        attachments: list[Attachment] | None = None,
     ) -> None:
         """Send an email via a SimpleLogin alias over SMTP.
 
@@ -280,7 +284,7 @@ def _build_message(
     to_email: str,
     subject: str,
     body: str,
-    body_html: Optional[str],
+    body_html: str | None,
     attachments: list[Attachment],
 ) -> EmailMessage:
     msg = EmailMessage()
