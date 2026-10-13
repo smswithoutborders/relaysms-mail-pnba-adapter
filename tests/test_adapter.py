@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import dataclasses
 import json
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -18,11 +20,13 @@ from relaysms_adapter_sdk import (
     SendRequest,
     TokenInvalidError,
     UpstreamError,
+    manifest,
 )
 from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
 
 from relaysms_mail_pnba_adapter import RelaySMSMailAdapter
 from relaysms_mail_pnba_adapter.authy import AuthyClient, AuthyError
+from relaysms_mail_pnba_adapter.credentials import Credentials
 from relaysms_mail_pnba_adapter.simplelogin import SimpleLoginError
 
 PHONE = "+237600000000"
@@ -143,3 +147,9 @@ class TestSendMessage:
 def test_revoke_disables_alias(adapter):
     adapter.revoke(RevokeRequest(Account(PHONE)))
     adapter.client.toggle_alias.assert_called_once_with(7)
+
+
+def test_adapter_toml_declares_every_setting():
+    declared = manifest.load(Path(__file__).parents[1]).config
+    expected = {field.name for field in dataclasses.fields(Credentials)}
+    assert {field.name for field in declared} == expected

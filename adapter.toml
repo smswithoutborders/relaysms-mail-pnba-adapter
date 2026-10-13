@@ -9,3 +9,67 @@ auth_provider = "shortmesh-authy"
 [icons]
 svg = "https://raw.githubusercontent.com/smswithoutborders/relaysms-mail-pnba-adapter/main/icons/relaysms-mail.svg"
 png = "https://raw.githubusercontent.com/smswithoutborders/relaysms-mail-pnba-adapter/main/icons/relaysms-mail.png"
+
+[config.sl_primary_email]
+required = true
+description = "SimpleLogin mailbox that aliases forward to."
+
+[config.sl_primary_domain]
+required = true
+description = "Custom domain verified in SimpleLogin, used for aliases."
+
+[config.sl_api_key]
+required = true
+secret = true
+description = "SimpleLogin API key."
+
+[config.smtp_host]
+required = true
+description = "SMTP server, such as smtp.gmail.com."
+
+[config.smtp_port]
+type = "integer"
+required = true
+description = "465 for implicit TLS, 587 for STARTTLS."
+
+[config.smtp_username]
+required = true
+description = "SMTP login, usually the email address."
+
+[config.smtp_password]
+required = true
+secret = true
+description = "SMTP password or app password."
+
+[config.smtp_use_tls]
+type = "boolean"
+description = "Implicit TLS; false for STARTTLS. Default: true."
+
+[config.alias_prefix]
+description = "Prefix for phone-number aliases. Default: none."
+
+[config.alias_suffix]
+description = "Suffix for phone-number aliases. Default: none."
+
+[config.random_alias_prefix]
+description = "Prefix for the random aliases offline sends use. Default: relaysms-."
+
+[config.random_alias_id_bytes]
+type = "integer"
+description = "Random bytes in a random alias. Default: 4."
+
+[config.random_alias_db_filename]
+description = "SQLite file in the state directory that tracks random aliases. Default: random_aliases.sqlite3."
+
+[config.sl_base_url]
+description = "SimpleLogin API URL, for a self-hosted instance. Default: https://app.simplelogin.io/api."
+
+[config.authy_base_url]
+description = "Shortmesh Authy API URL, for a self-hosted instance. Default: https://authy.shortmesh.com."
+
+[config.authy_token]
+secret = true
+description = "Matrix bearer token for Authy."
+
+[config.authy_sender]
+description = "Phone number of the Authy device that sends codes."
