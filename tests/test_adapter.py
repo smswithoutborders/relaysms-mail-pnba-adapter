@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import dataclasses
 import json
+import logging
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,11 +20,13 @@ from relaysms_adapter_sdk import (
     SendRequest,
     TokenInvalidError,
     UpstreamError,
+    manifest,
 )
 from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
 
 from relaysms_mail_pnba_adapter import RelaySMSMailAdapter
-from relaysms_mail_pnba_adapter.authy import AuthyError
+from relaysms_mail_pnba_adapter.authy import AuthyClient, AuthyError
+from relaysms_mail_pnba_adapter.credentials import Credentials
 from relaysms_mail_pnba_adapter.simplelogin import SimpleLoginError
 
 PHONE = "+237600000000"
@@ -62,6 +67,19 @@ def test_send_code(adapter):
     adapter.authy.generate_otp.assert_called_once_with(
         phone_number=PHONE, platform="wa", sender=None
     )
+
+
+def test_authy_logs_leave_out_the_phone_number(caplog):
+    caplog.set_level(logging.DEBUG)
+    authy = AuthyClient("https://authy.example")
+    authy._http = MagicMock()
+    authy._http.post.return_value = {"expires_at": 1767225600}
+
+    authy.generate_otp(PHONE, "wa")
+    authy.verify_otp(PHONE, "wa", "123456")
+
+    assert caplog.records
+    assert PHONE not in caplog.text
 
 
 def test_code_needs_channel(adapter):
@@ -129,3 +147,9 @@ class TestSendMessage:
 def test_revoke_disables_alias(adapter):
     adapter.revoke(RevokeRequest(Account(PHONE)))
     adapter.client.toggle_alias.assert_called_once_with(7)
+
+
+def test_adapter_toml_declares_every_setting():
+    declared = manifest.load(Path(__file__).parents[1]).config
+    expected = {field.name for field in dataclasses.fields(Credentials)}
+    assert {field.name for field in declared} == expected
