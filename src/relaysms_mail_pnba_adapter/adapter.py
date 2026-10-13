@@ -45,19 +45,19 @@ class RelaySMSMailAdapter(PNBAAdapter):
     def __init__(self) -> None:
         self.credentials = credentials.load()
         self.client = SimpleLoginClient(
-            api_key=self.credentials.SL_API_KEY,
+            api_key=self.credentials.sl_api_key,
             smtp=SMTPConfig(
-                host=self.credentials.SMTP_HOST,
-                port=self.credentials.SMTP_PORT,
-                username=self.credentials.SMTP_USERNAME,
-                password=self.credentials.SMTP_PASSWORD,
-                use_tls=self.credentials.SMTP_USE_TLS,
+                host=self.credentials.smtp_host,
+                port=self.credentials.smtp_port,
+                username=self.credentials.smtp_username,
+                password=self.credentials.smtp_password,
+                use_tls=self.credentials.smtp_use_tls,
             ),
-            base_url=self.credentials.SL_BASE_URL,
+            base_url=self.credentials.sl_base_url,
         )
         self.authy = AuthyClient(
-            base_url=self.credentials.AUTHY_BASE_URL,
-            token=self.credentials.AUTHY_TOKEN,
+            base_url=self.credentials.authy_base_url,
+            token=self.credentials.authy_token,
         )
 
     @override
@@ -68,7 +68,7 @@ class RelaySMSMailAdapter(PNBAAdapter):
             otp = self.authy.generate_otp(
                 phone_number=request.phone_number,
                 platform=request.channel,
-                sender=self.credentials.AUTHY_SENDER,
+                sender=self.credentials.authy_sender,
             )
         return CodeSent(
             expires_at=_expiry(otp.get("expires_at")),
@@ -117,7 +117,7 @@ class RelaySMSMailAdapter(PNBAAdapter):
                     raise TokenInvalidError("The alias is gone or disabled.")
             self.client.send_email(
                 alias_id=alias["id"],
-                from_email=self.credentials.SL_PRIMARY_EMAIL,
+                from_email=self.credentials.sl_primary_email,
                 to_email=message.recipient,
                 subject=message.subject or "",
                 body=message.body,
@@ -127,14 +127,14 @@ class RelaySMSMailAdapter(PNBAAdapter):
 
     def _alias_prefix(self, phone_number: str) -> str:
         digits = re.sub(r"\D", "", phone_number)
-        return f"{self.credentials.ALIAS_PREFIX}{digits}{self.credentials.ALIAS_SUFFIX}"
+        return f"{self.credentials.alias_prefix}{digits}{self.credentials.alias_suffix}"
 
     def _get_alias(self, phone_number: str) -> AliasResponse | None:
         alias = (
-            f"{self._alias_prefix(phone_number)}@{self.credentials.SL_PRIMARY_DOMAIN}"
+            f"{self._alias_prefix(phone_number)}@{self.credentials.sl_primary_domain}"
         )
         aliases = self.client.fetch_aliases(
-            query=alias, mailbox_email=self.credentials.SL_PRIMARY_EMAIL
+            query=alias, mailbox_email=self.credentials.sl_primary_email
         )
         return aliases[0] if aliases else None
 
@@ -153,10 +153,10 @@ class RelaySMSMailAdapter(PNBAAdapter):
         )
 
     def _create_random_alias(self) -> AliasResponse:
-        with RandomAliasStore(self.credentials.RANDOM_ALIAS_DB_FILENAME) as store:
+        with RandomAliasStore(self.credentials.random_alias_db_filename) as store:
             for _ in range(RANDOM_ALIAS_ATTEMPTS):
-                random_id = secrets.token_hex(self.credentials.RANDOM_ALIAS_ID_BYTES)
-                prefix = f"{self.credentials.RANDOM_ALIAS_PREFIX}{random_id}"
+                random_id = secrets.token_hex(self.credentials.random_alias_id_bytes)
+                prefix = f"{self.credentials.random_alias_prefix}{random_id}"
                 if store.register(prefix):
                     break
             else:
@@ -172,14 +172,14 @@ class RelaySMSMailAdapter(PNBAAdapter):
                 raise
 
     def _create_alias(self, prefix: str, *, name: str, note: str) -> AliasResponse:
-        mailbox = self.client.fetch_mailbox_by_email(self.credentials.SL_PRIMARY_EMAIL)
+        mailbox = self.client.fetch_mailbox_by_email(self.credentials.sl_primary_email)
         if not mailbox:
-            raise UpstreamError(f"No mailbox for {self.credentials.SL_PRIMARY_EMAIL}.")
+            raise UpstreamError(f"No mailbox for {self.credentials.sl_primary_email}.")
         timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S (%Z)")
         return self.client.create_alias(
             alias_prefix=prefix,
             mailbox_id=mailbox["id"],
-            hostname=self.credentials.SL_PRIMARY_DOMAIN,
+            hostname=self.credentials.sl_primary_domain,
             alias_name=name,
             note=f"{note} at {timestamp}.",
         )

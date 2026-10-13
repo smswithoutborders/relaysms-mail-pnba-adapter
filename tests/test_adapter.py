@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import json
+import logging
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
@@ -21,7 +22,7 @@ from relaysms_adapter_sdk import (
 from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
 
 from relaysms_mail_pnba_adapter import RelaySMSMailAdapter
-from relaysms_mail_pnba_adapter.authy import AuthyError
+from relaysms_mail_pnba_adapter.authy import AuthyClient, AuthyError
 from relaysms_mail_pnba_adapter.simplelogin import SimpleLoginError
 
 PHONE = "+237600000000"
@@ -62,6 +63,19 @@ def test_send_code(adapter):
     adapter.authy.generate_otp.assert_called_once_with(
         phone_number=PHONE, platform="wa", sender=None
     )
+
+
+def test_authy_logs_leave_out_the_phone_number(caplog):
+    caplog.set_level(logging.DEBUG)
+    authy = AuthyClient("https://authy.example")
+    authy._http = MagicMock()
+    authy._http.post.return_value = {"expires_at": 1767225600}
+
+    authy.generate_otp(PHONE, "wa")
+    authy.verify_otp(PHONE, "wa", "123456")
+
+    assert caplog.records
+    assert PHONE not in caplog.text
 
 
 def test_code_needs_channel(adapter):

@@ -68,12 +68,7 @@ class AuthyClient:
         except HTTPError as e:
             raise AuthyError(str(e)) from e
 
-        logger.debug(
-            "OTP sent to %s, via %s, expires_at %s.",
-            phone_number,
-            platform,
-            data["expires_at"],
-        )
+        logger.debug("OTP sent via %s, expires at %s.", platform, data["expires_at"])
         return data
 
     def verify_otp(
@@ -95,7 +90,7 @@ class AuthyClient:
         except HTTPError as e:
             raise AuthyError(str(e)) from e
 
-        logger.debug("OTP verified for %s.", phone_number)
+        logger.debug("OTP verified.")
         return data
 
     def list_platforms(self) -> list[PlatformResponse]:
