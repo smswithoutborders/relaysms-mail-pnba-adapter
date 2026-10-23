@@ -4,7 +4,7 @@ Gives [RelaySMS Publisher](https://github.com/smswithoutborders/RelaySMS-Publish
 
 ## Settings
 
-Each setting is described in [adapter.toml](adapter.toml). The required ones come from [SimpleLogin](https://app.simplelogin.io/dashboard/api_key), with a [verified domain](https://app.simplelogin.io/dashboard/custom_domain), and your SMTP provider. Codes are sent with [Shortmesh Authy](https://github.com/shortmesh/Authy-API#authentication); set `authy_token` and `authy_sender` to send from your own device. On a Publisher, an administrator sets them with its [settings commands](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/docs/platforms.md#settings) or REST API.
+Each setting is described in [adapter.toml](adapter.toml). The required ones come from [SimpleLogin](https://app.simplelogin.io/dashboard/api_key), with a [verified domain](https://app.simplelogin.io/dashboard/custom_domain), and your SMTP provider. Codes are sent with [Shortmesh Authy](https://github.com/shortmesh/Authy-API#authentication); set `authy_base_url`, `authy_token` and `authy_sender` to send from your own Authy. On a Publisher, set them up as its [RelaySMS Mail guide](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/docs/platforms/relaysms-mail.md) describes.
 
 ## Develop
 
