@@ -29,7 +29,7 @@ from relaysms_mail_pnba_adapter import RelaySMSMailAdapter
 from relaysms_mail_pnba_adapter.authy import AuthyClient, AuthyError, _mask
 from relaysms_mail_pnba_adapter.credentials import Credentials
 from relaysms_mail_pnba_adapter.httpclient import HTTPError, _handle
-from relaysms_mail_pnba_adapter.simplelogin import SimpleLoginError
+from relaysms_mail_pnba_adapter.simplelogin import SimpleLoginClient, SimpleLoginError
 
 PHONE = "+237600000000"
 ALIAS = {"id": 7, "email": "237600000000@relaysms.me", "enabled": True}
@@ -82,6 +82,24 @@ def test_authy_logs_leave_out_the_phone_number(caplog):
 
     assert caplog.records
     assert PHONE not in caplog.text
+
+
+def test_alias_logs_leave_out_the_phone_number(caplog):
+    caplog.set_level(logging.DEBUG)
+    digits = PHONE.lstrip("+")
+    client = SimpleLoginClient(api_key="k", smtp=MagicMock())
+    client._http = MagicMock()
+    client._http.get.return_value = {
+        "suffixes": [{"suffix": "@relaysms.me", "signed_suffix": "s"}]
+    }
+    client._http.post.side_effect = [{"aliases": [ALIAS]}, ALIAS]
+
+    client.fetch_aliases(query=ALIAS["email"])
+    client.create_alias(digits, mailbox_id=1, hostname="relaysms.me")
+
+    assert "Fetched 1 aliases." in caplog.text
+    assert "Created alias ID 7." in caplog.text
+    assert digits not in caplog.text
 
 
 @pytest.mark.parametrize(
