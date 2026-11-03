@@ -26,7 +26,7 @@ class PlatformResponse(TypedDict):
     device_id: str
 
 
-class AuthyError(Exception):
+class AuthyError(HTTPError):
     """Raised when the Authy API returns an error or request fails."""
 
 
@@ -66,7 +66,7 @@ class AuthyClient:
         try:
             data: OTPResponse = self._http.post("/api/v1/otp/generate", payload)
         except HTTPError as e:
-            raise AuthyError(str(e)) from e
+            raise AuthyError(str(e), status_code=e.status_code) from e
 
         logger.debug("OTP sent via %s, expires at %s.", platform, data["expires_at"])
         return data
@@ -88,7 +88,7 @@ class AuthyClient:
                 {"phone_number": phone_number, "platform": platform, "code": code},
             )
         except HTTPError as e:
-            raise AuthyError(str(e)) from e
+            raise AuthyError(str(e), status_code=e.status_code) from e
 
         logger.debug("OTP verified.")
         return data
@@ -98,7 +98,7 @@ class AuthyClient:
         try:
             data = self._http.get("/api/v1/platforms")
         except HTTPError as e:
-            raise AuthyError(str(e)) from e
+            raise AuthyError(str(e), status_code=e.status_code) from e
 
         logger.debug("Fetched %d platforms.", len(data))
         return data

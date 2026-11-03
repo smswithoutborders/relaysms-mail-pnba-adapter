@@ -9,7 +9,15 @@ logger = logging.getLogger(__name__)
 
 
 class HTTPError(Exception):
-    """Raised when an HTTP request fails."""
+    """Raised when an HTTP request fails.
+
+    ``status_code`` is the response's error status, or ``None`` when a successful
+    response's body is not a JSON object or list.
+    """
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class HTTPClient:
@@ -63,7 +71,9 @@ def _handle(response: requests.Response) -> dict[str, Any] | list:
             raise HTTPError(f"Unexpected response type: {type(data).__name__}")
         return data
     except requests.exceptions.HTTPError:
-        raise HTTPError(_extract_error(response)) from None
+        raise HTTPError(
+            _extract_error(response), status_code=response.status_code
+        ) from None
     except requests.exceptions.RequestException as e:
         raise HTTPError(str(e)) from e
 

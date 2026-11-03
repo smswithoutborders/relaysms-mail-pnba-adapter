@@ -7,6 +7,7 @@ import smtplib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from http import HTTPStatus
 from typing import override
 
 from relaysms_adapter_sdk import (
@@ -79,14 +80,22 @@ class RelaySMSMailAdapter(PNBAAdapter):
     def verify_code(self, request: CodeVerificationRequest) -> Account:
         if not request.channel:
             raise InvalidParamsError("A channel is required.")
-        try:
-            self.authy.verify_otp(
-                phone_number=request.phone_number,
-                platform=request.channel,
-                code=request.code,
-            )
-        except AuthyError as e:
-            raise AuthenticationError(str(e)) from e
+        with _upstream():
+            try:
+                self.authy.verify_otp(
+                    phone_number=request.phone_number,
+                    platform=request.channel,
+                    code=request.code,
+                )
+            except AuthyError as e:
+                # Authy answers 401 for a wrong, expired or used code, and 429 once
+                # the code has had too many attempts.
+                if e.status_code in (
+                    HTTPStatus.UNAUTHORIZED,
+                    HTTPStatus.TOO_MANY_REQUESTS,
+                ):
+                    raise AuthenticationError(str(e)) from e
+                raise
         with _upstream():
             alias = self._get_or_create_alias(request.phone_number)
         return Account(identifier=request.phone_number, name=alias["email"])
@@ -197,10 +206,18 @@ def _expiry(value: object) -> datetime | None:
 
 @contextmanager
 def _upstream() -> Iterator[None]:
-    """Map SimpleLogin, Authy and SMTP failures to UpstreamError."""
+    """Map SimpleLogin, Authy and SMTP failures to UpstreamError.
+
+    An Authy 400 becomes InvalidParamsError instead: Authy sends it for an invalid
+    phone number, or a channel it has no device for.
+    """
     try:
         yield
     except AdapterError:
         raise
-    except (SimpleLoginError, AuthyError, smtplib.SMTPException, OSError) as e:
+    except AuthyError as e:
+        if e.status_code == HTTPStatus.BAD_REQUEST:
+            raise InvalidParamsError(str(e)) from e
+        raise UpstreamError(str(e)) from e
+    except (SimpleLoginError, smtplib.SMTPException, OSError) as e:
         raise UpstreamError(str(e)) from e

@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 from relaysms_adapter_sdk import (
     Account,
     Attachment,
@@ -27,6 +28,7 @@ from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
 from relaysms_mail_pnba_adapter import RelaySMSMailAdapter
 from relaysms_mail_pnba_adapter.authy import AuthyClient, AuthyError
 from relaysms_mail_pnba_adapter.credentials import Credentials
+from relaysms_mail_pnba_adapter.httpclient import HTTPError, _handle
 from relaysms_mail_pnba_adapter.simplelogin import SimpleLoginError
 
 PHONE = "+237600000000"
@@ -82,6 +84,49 @@ def test_authy_logs_leave_out_the_phone_number(caplog):
     assert PHONE not in caplog.text
 
 
+@pytest.mark.parametrize(
+    ("status", "error"),
+    [
+        (400, InvalidParamsError),
+        (401, UpstreamError),
+        (500, UpstreamError),
+        (None, UpstreamError),
+    ],
+)
+def test_send_code_maps_authy_status(adapter, status, error):
+    adapter.authy.generate_otp.side_effect = AuthyError("rejected", status_code=status)
+    with pytest.raises(error, match="rejected"):
+        adapter.send_code(CodeRequest(PHONE, channel="wa"))
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda authy: authy.generate_otp(PHONE, "wa"),
+        lambda authy: authy.verify_otp(PHONE, "wa", "0"),
+        lambda authy: authy.list_platforms(),
+    ],
+    ids=["generate_otp", "verify_otp", "list_platforms"],
+)
+def test_authy_keeps_the_status_code(call):
+    authy = AuthyClient("https://authy.example")
+    authy._http = MagicMock()
+    authy._http.post.side_effect = HTTPError("bad number", status_code=400)
+    authy._http.get.side_effect = authy._http.post.side_effect
+    with pytest.raises(AuthyError, match="bad number") as excinfo:
+        call(authy)
+    assert excinfo.value.status_code == 400
+
+
+def test_http_error_keeps_the_status_code():
+    response = requests.Response()
+    response.status_code = 400
+    response._content = b'{"error": "bad number"}'
+    with pytest.raises(HTTPError, match="bad number") as excinfo:
+        _handle(response)
+    assert excinfo.value.status_code == 400
+
+
 def test_code_needs_channel(adapter):
     with pytest.raises(InvalidParamsError, match="channel"):
         adapter.send_code(CodeRequest(PHONE))
@@ -102,9 +147,26 @@ class TestVerifyCode:
         assert kwargs["alias_prefix"] == "237600000000"
         assert kwargs["hostname"] == "relaysms.me"
 
-    def test_wrong_code(self, adapter):
-        adapter.authy.verify_otp.side_effect = AuthyError("invalid code")
-        with pytest.raises(AuthenticationError):
+    @pytest.mark.parametrize(
+        ("status", "error"),
+        [
+            (400, InvalidParamsError),
+            (401, AuthenticationError),
+            (429, AuthenticationError),
+            (500, UpstreamError),
+            (None, UpstreamError),
+        ],
+    )
+    def test_maps_authy_status(self, adapter, status, error):
+        adapter.authy.verify_otp.side_effect = AuthyError(
+            "rejected", status_code=status
+        )
+        with pytest.raises(error, match="rejected"):
+            adapter.verify_code(CodeVerificationRequest(PHONE, "0", "wa"))
+
+    def test_authy_unreachable(self, adapter):
+        adapter.authy.verify_otp.side_effect = requests.ConnectionError("unreachable")
+        with pytest.raises(UpstreamError, match="unreachable"):
             adapter.verify_code(CodeVerificationRequest(PHONE, "0", "wa"))
 
 
