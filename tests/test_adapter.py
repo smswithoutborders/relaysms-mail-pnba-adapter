@@ -26,7 +26,7 @@ from relaysms_adapter_sdk import (
 from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
 
 from relaysms_mail_pnba_adapter import RelaySMSMailAdapter
-from relaysms_mail_pnba_adapter.authy import AuthyClient, AuthyError
+from relaysms_mail_pnba_adapter.authy import AuthyClient, AuthyError, _mask
 from relaysms_mail_pnba_adapter.credentials import Credentials
 from relaysms_mail_pnba_adapter.httpclient import HTTPError, _handle
 from relaysms_mail_pnba_adapter.simplelogin import SimpleLoginError
@@ -97,6 +97,39 @@ def test_send_code_maps_authy_status(adapter, status, error):
     adapter.authy.generate_otp.side_effect = AuthyError("rejected", status_code=status)
     with pytest.raises(error, match="rejected"):
         adapter.send_code(CodeRequest(PHONE, channel="wa"))
+
+
+@pytest.mark.parametrize(
+    ("phone", "masked"),
+    [
+        ("+237600000012", "+2376xxxxxx12 (12 digits)"),
+        ("0677 123 456", "0677 xxx x56 (10 digits)"),
+        ("+12345678", "+1234xx78 (8 digits)"),
+        ("+1234567", "+xxxxxxx (7 digits)"),
+    ],
+    ids=["international", "national", "eight-digit", "seven-digit"],
+)
+def test_mask(phone, masked):
+    assert _mask(phone) == masked
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda authy: authy.generate_otp(PHONE, "wa"),
+        lambda authy: authy.verify_otp(PHONE, "wa", "0"),
+    ],
+    ids=["generate_otp", "verify_otp"],
+)
+@pytest.mark.parametrize(("status", "logged"), [(400, True), (500, False)])
+def test_authy_400_logs_the_number_masked(caplog, call, status, logged):
+    authy = AuthyClient("https://authy.example")
+    authy._http = MagicMock()
+    authy._http.post.side_effect = HTTPError("invalid", status_code=status)
+    with pytest.raises(AuthyError):
+        call(authy)
+    assert ("+2376xxxxxx00 (12 digits)" in caplog.text) is logged
+    assert PHONE not in caplog.text
 
 
 @pytest.mark.parametrize(
