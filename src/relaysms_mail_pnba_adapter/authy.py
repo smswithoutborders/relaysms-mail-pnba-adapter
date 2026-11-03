@@ -5,6 +5,7 @@ API docs: https://github.com/shortmesh/Authy-API/blob/main/docs/USAGE.md
 """
 
 import logging
+from http import HTTPStatus
 from typing import TypedDict
 
 from relaysms_mail_pnba_adapter.httpclient import HTTPClient, HTTPError
@@ -26,7 +27,7 @@ class PlatformResponse(TypedDict):
     device_id: str
 
 
-class AuthyError(Exception):
+class AuthyError(HTTPError):
     """Raised when the Authy API returns an error or request fails."""
 
 
@@ -66,7 +67,7 @@ class AuthyClient:
         try:
             data: OTPResponse = self._http.post("/api/v1/otp/generate", payload)
         except HTTPError as e:
-            raise AuthyError(str(e)) from e
+            raise _authy_error(e, phone_number) from e
 
         logger.debug("OTP sent via %s, expires at %s.", platform, data["expires_at"])
         return data
@@ -88,7 +89,7 @@ class AuthyClient:
                 {"phone_number": phone_number, "platform": platform, "code": code},
             )
         except HTTPError as e:
-            raise AuthyError(str(e)) from e
+            raise _authy_error(e, phone_number) from e
 
         logger.debug("OTP verified.")
         return data
@@ -98,7 +99,32 @@ class AuthyClient:
         try:
             data = self._http.get("/api/v1/platforms")
         except HTTPError as e:
-            raise AuthyError(str(e)) from e
+            raise AuthyError(str(e), status_code=e.status_code) from e
 
         logger.debug("Fetched %d platforms.", len(data))
         return data
+
+
+def _authy_error(e: HTTPError, phone_number: str) -> AuthyError:
+    """Wrap ``e``, logging ``phone_number`` masked if Authy answered 400."""
+    if e.status_code == HTTPStatus.BAD_REQUEST:
+        logger.warning("Authy rejected the request for %s: %s", _mask(phone_number), e)
+    return AuthyError(str(e), status_code=e.status_code)
+
+
+def _mask(phone_number: str) -> str:
+    """Mask all but a phone number's first four and last two digits.
+
+    Punctuation is kept and the digit count added. A number with fewer than 8
+    digits is masked in full.
+    """
+    digits = sum(c.isdigit() for c in phone_number)
+    masked = []
+    position = 0
+    for c in phone_number:
+        if c.isdigit():
+            if digits < 8 or 4 <= position < digits - 2:
+                c = "x"
+            position += 1
+        masked.append(c)
+    return f"{''.join(masked)} ({digits} digits)"
