@@ -138,8 +138,8 @@ class SimpleLoginClient:
         except HTTPError as e:
             raise SimpleLoginError(str(e)) from e
 
-        logger.debug("Fetched aliases (query=%r).", query)
         aliases: list[AliasResponse] = data.get("aliases", [])
+        logger.debug("Fetched %d aliases.", len(aliases))
 
         if not mailbox_email:
             return aliases
@@ -190,7 +190,7 @@ class SimpleLoginClient:
         except HTTPError as e:
             raise SimpleLoginError(str(e)) from e
 
-        logger.debug("Created alias %s.", alias["email"])
+        logger.debug("Created alias ID %s.", alias["id"])
         return alias
 
     def delete_alias(self, alias_id: int) -> None:
